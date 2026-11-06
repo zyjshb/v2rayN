@@ -266,9 +266,7 @@ tls:
   cert: /etc/hysteria/server.crt
   key: /etc/hysteria/server.key
 
-bandwidth:
-  up: ${BW_UP}
-  down: ${BW_DOWN}
+ignoreClientBandwidth: true
 
 auth:
   type: password
