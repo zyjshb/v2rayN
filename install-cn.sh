@@ -51,10 +51,17 @@ generate_free_port() {
 
 # 提取已有配置（老用户热更新无感保留）
 extract_existing_config() {
+    local target_tag="$EDITION_TAG"
     if [ -f "$ENV_FILE" ]; then
         # shellcheck disable=SC1090
         source "$ENV_FILE"
-        return 0
+        EDITION_TAG="$target_tag"
+        SNI_DOMAIN="www.apple.com"
+        CLIENT_FP="safari"
+        HY2_SNI=${HY2_SNI:-turn.live.com}
+        if [ -n "${PORT:-}" ] && [ -n "${UUID:-}" ] && [ -n "${PRIVATE_KEY:-}" ] && [ -n "${PUBLIC_KEY:-}" ] && [ -n "${HY2_PASS:-}" ]; then
+            return 0
+        fi
     fi
 
     if [ -f "$XRAY_CFG" ] && [ -f "$HY2_CFG" ]; then
@@ -62,22 +69,22 @@ extract_existing_config() {
         UUID=$(jq -r '.inbounds[0].settings.clients[0].id // empty' "$XRAY_CFG" 2>/dev/null || true)
         PRIVATE_KEY=$(jq -r '.inbounds[0].streamSettings.realitySettings.privateKey // empty' "$XRAY_CFG" 2>/dev/null || true)
         SHORT_ID=$(jq -r '.inbounds[0].streamSettings.realitySettings.shortIds[0] // empty' "$XRAY_CFG" 2>/dev/null || true)
-        SNI_DOMAIN=$(jq -r '.inbounds[0].streamSettings.realitySettings.serverNames[0] // empty' "$XRAY_CFG" 2>/dev/null || true)
+        SNI_DOMAIN="www.apple.com"
         HY2_PASS=$(awk '/auth:/,0 {if ($1 == "password:") {print $2; exit}}' "$HY2_CFG" | tr -d ' "\r\n' || true)
 
         if [ -f "$LINKS_FILE" ]; then
             PUBLIC_KEY=$(grep -oP 'pbk=\K[^&]+' "$LINKS_FILE" | head -n1 | tr -d '\r\n' || true)
-            CLIENT_FP=$(grep -oP 'fp=\K[^&]+' "$LINKS_FILE" | head -n1 | tr -d '\r\n' || true)
             HY2_SNI=$(grep -oP 'hy2://[^\n]+sni=\K[^&#]+' "$LINKS_FILE" | head -n1 | tr -d '\r\n' || true)
         fi
         if [ -z "${PUBLIC_KEY:-}" ] && [ -n "${PRIVATE_KEY:-}" ] && [ -x /usr/local/bin/xray ]; then
             X25519_DERIVE=$(/usr/local/bin/xray x25519 -i "$PRIVATE_KEY" 2>/dev/null || true)
             PUBLIC_KEY=$(echo "$X25519_DERIVE" | awk -F': ' '/Public|Password/{print $2}' | tr -d ' \r\n')
         fi
-        CLIENT_FP=${CLIENT_FP:-safari}
+        EDITION_TAG="$target_tag"
+        CLIENT_FP="safari"
         HY2_SNI=${HY2_SNI:-turn.live.com}
 
-        if [ -n "${PORT:-}" ] && [ -n "${UUID:-}" ] && [ -n "${PRIVATE_KEY:-}" ] && [ -n "${HY2_PASS:-}" ]; then
+        if [ -n "${PORT:-}" ] && [ -n "${UUID:-}" ] && [ -n "${PRIVATE_KEY:-}" ] && [ -n "${PUBLIC_KEY:-}" ] && [ -n "${HY2_PASS:-}" ]; then
             return 0
         fi
     fi
@@ -193,6 +200,7 @@ install_cores() {
 # 生成 Hysteria 2 证书
 generate_hy2_cert() {
     local force_regen=${1:-false}
+    echo -e "${SKYBLUE}[4/7] 正在校验与签发 Hysteria 2 TLS 证书...${PLAIN}"
     mkdir -p /etc/hysteria
     if [ "$force_regen" = "true" ] || [ ! -f /etc/hysteria/server.crt ] || [ ! -f /etc/hysteria/server.key ]; then
         CERT_DAYS=$(shuf -i 365-1095 -n 1)
@@ -207,7 +215,8 @@ generate_hy2_cert() {
     fi
     chown -R hysteria:hysteria /etc/hysteria 2>/dev/null || true
     chmod 755 /etc/hysteria 2>/dev/null || true
-    chmod 644 /etc/hysteria/server.crt /etc/hysteria/server.key 2>/dev/null || true
+    chmod 644 /etc/hysteria/server.crt 2>/dev/null || true
+    chmod 600 /etc/hysteria/server.key 2>/dev/null || true
 }
 
 # 写入配置并应用高并发守护策略
@@ -348,12 +357,19 @@ OVERRIDE
         ufw allow "${PORT}/udp" >/dev/null 2>&1 || true
         ufw disable >/dev/null 2>&1 || true
     fi
-    iptables -I INPUT -p tcp --dport "${PORT}" -j ACCEPT 2>/dev/null || true
-    iptables -I INPUT -p udp --dport "${PORT}" -j ACCEPT 2>/dev/null || true
+    iptables -C INPUT -p tcp --dport "${PORT}" -j ACCEPT 2>/dev/null || iptables -I INPUT -p tcp --dport "${PORT}" -j ACCEPT 2>/dev/null || true
+    iptables -C INPUT -p udp --dport "${PORT}" -j ACCEPT 2>/dev/null || iptables -I INPUT -p udp --dport "${PORT}" -j ACCEPT 2>/dev/null || true
 
+    echo -e "${SKYBLUE}[7/7] 正在启动并校验双栈服务运行状态...${PLAIN}"
     systemctl daemon-reload
     systemctl enable xray hysteria-server >/dev/null 2>&1 || true
-    ( systemctl restart xray hysteria-server >/dev/null 2>&1 & )
+    systemctl restart xray hysteria-server >/dev/null 2>&1 || true
+    sleep 1
+    if ! systemctl is-active --quiet xray || ! systemctl is-active --quiet hysteria-server; then
+        echo -e "${YELLOW}[提示] 检测到服务首次启动较慢，正在重试拉起...${PLAIN}"
+        chown -R hysteria:hysteria /etc/hysteria 2>/dev/null || true
+        systemctl restart xray hysteria-server || true
+    fi
 }
 
 # 输出双节点链接与本地配置
@@ -431,7 +447,13 @@ change_port() {
         exit 1
     fi
     source "$ENV_FILE"
-    NEW_PORT=$(shuf -i 20000-60000 -n 1)
+    local NEW_PORT
+    while true; do
+        NEW_PORT=$(shuf -i 20000-60000 -n 1)
+        if [ "$NEW_PORT" != "$PORT" ] && ! ss -tuln | awk '{print $5}' | grep -qE ":${NEW_PORT}$"; then
+            break
+        fi
+    done
     echo -e "\033[0;33m正在将节点端口从 ${PORT} 切换为全新随机端口: ${NEW_PORT}...\033[0m"
     sed -i "s/\"port\": ${PORT}/\"port\": ${NEW_PORT}/g" /usr/local/etc/xray/config.json
     sed -i "s/listen: :${PORT}/listen: :${NEW_PORT}/g" /etc/hysteria/config.yaml
@@ -439,8 +461,11 @@ change_port() {
     
     iptables -I INPUT -p tcp --dport "${NEW_PORT}" -j ACCEPT 2>/dev/null || true
     iptables -I INPUT -p udp --dport "${NEW_PORT}" -j ACCEPT 2>/dev/null || true
+    iptables -D INPUT -p tcp --dport "${PORT}" -j ACCEPT 2>/dev/null || true
+    iptables -D INPUT -p udp --dport "${PORT}" -j ACCEPT 2>/dev/null || true
     systemctl restart xray hysteria-server
     
+    sed -i "s/: ${PORT}/: ${NEW_PORT}/g" "$LINKS_FILE"
     sed -i "s/:${PORT}/:${NEW_PORT}/g" "$LINKS_FILE"
     echo -e "\033[0;32m[成功] 端口已切换为 ${NEW_PORT}！\033[0m"
     cat "$LINKS_FILE"
@@ -474,13 +499,13 @@ main() {
         SHORT_ID=$(openssl rand -hex 5)
         HY2_PASS=$(openssl rand -base64 18 | tr -dc 'a-zA-Z0-9' | head -c 24)
         
-        # 预先生成 REALITY X25519 密钥
+        # 预先生成 REALITY X25519 密钥（兼容新旧版 Xray-core 输出格式）
         if ! command -v xray >/dev/null 2>&1; then
             bash -c "$(curl -L https://github.com/XTLS/Xray-install/raw/main/install-release.sh)" @ install >/dev/null
         fi
         X25519_KEYPAIR=$(/usr/local/bin/xray x25519)
-        PRIVATE_KEY=$(echo "$X25519_KEYPAIR" | awk -F': ' '/Private key/{print $2}' | tr -d ' \r\n')
-        PUBLIC_KEY=$(echo "$X25519_KEYPAIR" | awk -F': ' '/Public key/{print $2}' | tr -d ' \r\n')
+        PRIVATE_KEY=$(echo "$X25519_KEYPAIR" | awk -F': ' '/Private/{print $2}' | tr -d ' \r\n')
+        PUBLIC_KEY=$(echo "$X25519_KEYPAIR" | awk -F': ' '/Public|Password/{print $2}' | tr -d ' \r\n')
     fi
 
     clean_cloud_monitors

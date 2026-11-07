@@ -139,6 +139,7 @@ main() {
     detect_cloud_environment
 
     # 处理命令行参数快速启动
+    local is_auto_update="false"
     for arg in "$@"; do
         case "$arg" in
             --cn|-cn)
@@ -149,25 +150,35 @@ main() {
                 dispatch_install "2" "$@"
                 exit 0
                 ;;
+            update|--update|-u)
+                is_auto_update="true"
+                ;;
         esac
     done
 
-    # 若检测到老环境存在 EDITION_TAG，自动继承原有模式更新
+    # 若显式传入 update 参数且存在 EDITION_TAG，自动继承原有模式热更新
     if [ -f "$ENV_FILE" ]; then
         # shellcheck disable=SC1090
         source "$ENV_FILE"
-        if [ "${EDITION_TAG:-}" = "CN_CLOUD" ]; then
-            echo -e "${GREEN}>> 检测到已安装 [国内主流云特调版]，正在执行无缝平滑热更新...${PLAIN}"
-            dispatch_install "1" "$@"
-            exit 0
-        elif [ "${EDITION_TAG:-}" = "OVERSEAS_GIGA" ]; then
-            echo -e "${GREEN}>> 检测到已安装 [海外主流 VPS 特调版]，正在执行无缝平滑热更新...${PLAIN}"
-            dispatch_install "2" "$@"
-            exit 0
+        if [ "$is_auto_update" = "true" ]; then
+            if [ "${EDITION_TAG:-}" = "CN_CLOUD" ]; then
+                echo -e "${GREEN}>> 检测到已安装 [国内主流云特调版]，正在执行无缝平滑热更新...${PLAIN}"
+                dispatch_install "1" "$@"
+                exit 0
+            elif [ "${EDITION_TAG:-}" = "OVERSEAS_GIGA" ]; then
+                echo -e "${GREEN}>> 检测到已安装 [海外主流 VPS 特调版]，正在执行无缝平滑热更新...${PLAIN}"
+                dispatch_install "2" "$@"
+                exit 0
+            fi
         fi
     fi
 
     print_banner
+
+    if [ -n "${EDITION_TAG:-}" ]; then
+        echo -e " 当前已安装 : ${YELLOW}${EDITION_TAG}${PLAIN} (选择任意方案将自动保留原有端口与密钥无缝切换/更新)"
+        echo "----------------------------------------------------------------"
+    fi
 
     echo -e "请选择想要应用的调优方案:"
     echo -e " ${GREEN}1.${PLAIN} 国内主流云特调版 (${YELLOW}阿里云/腾讯云/华为云/百度云${PLAIN} - 切除云监控 + 内存防爆 + 防QoS锁速)"
@@ -176,11 +187,20 @@ main() {
     echo "----------------------------------------------------------------"
     
     local default_choice="1"
-    if [ "$IS_CN_CLOUD" = "false" ]; then
+    if [ "${EDITION_TAG:-}" = "OVERSEAS_GIGA" ]; then
+        default_choice="2"
+    elif [ "${EDITION_TAG:-}" = "CN_CLOUD" ]; then
+        default_choice="1"
+    elif [ "$IS_CN_CLOUD" = "false" ]; then
         default_choice="2"
     fi
 
-    read -rp "请输入选项 [默认回车使用推荐选项 $default_choice]: " user_choice
+    local user_choice=""
+    if [ -t 0 ]; then
+        read -rp "请输入选项 [默认回车使用推荐选项 $default_choice]: " user_choice
+    elif [ -e /dev/tty ]; then
+        read -rp "请输入选项 [默认回车使用推荐选项 $default_choice]: " user_choice < /dev/tty || true
+    fi
     user_choice=${user_choice:-$default_choice}
 
     case "$user_choice" in

@@ -51,10 +51,17 @@ generate_free_port() {
 
 # 提取已有配置（老用户热更新无感保留）
 extract_existing_config() {
+    local target_tag="$EDITION_TAG"
     if [ -f "$ENV_FILE" ]; then
         # shellcheck disable=SC1090
         source "$ENV_FILE"
-        return 0
+        EDITION_TAG="$target_tag"
+        SNI_DOMAIN="www.microsoft.com"
+        CLIENT_FP="chrome"
+        HY2_SNI=${HY2_SNI:-turn.live.com}
+        if [ -n "${PORT:-}" ] && [ -n "${UUID:-}" ] && [ -n "${PRIVATE_KEY:-}" ] && [ -n "${PUBLIC_KEY:-}" ] && [ -n "${HY2_PASS:-}" ]; then
+            return 0
+        fi
     fi
 
     if [ -f "$XRAY_CFG" ] && [ -f "$HY2_CFG" ]; then
@@ -62,22 +69,22 @@ extract_existing_config() {
         UUID=$(jq -r '.inbounds[0].settings.clients[0].id // empty' "$XRAY_CFG" 2>/dev/null || true)
         PRIVATE_KEY=$(jq -r '.inbounds[0].streamSettings.realitySettings.privateKey // empty' "$XRAY_CFG" 2>/dev/null || true)
         SHORT_ID=$(jq -r '.inbounds[0].streamSettings.realitySettings.shortIds[0] // empty' "$XRAY_CFG" 2>/dev/null || true)
-        SNI_DOMAIN=$(jq -r '.inbounds[0].streamSettings.realitySettings.serverNames[0] // empty' "$XRAY_CFG" 2>/dev/null || true)
+        SNI_DOMAIN="www.microsoft.com"
         HY2_PASS=$(awk '/auth:/,0 {if ($1 == "password:") {print $2; exit}}' "$HY2_CFG" | tr -d ' "\r\n' || true)
 
         if [ -f "$LINKS_FILE" ]; then
             PUBLIC_KEY=$(grep -oP 'pbk=\K[^&]+' "$LINKS_FILE" | head -n1 | tr -d '\r\n' || true)
-            CLIENT_FP=$(grep -oP 'fp=\K[^&]+' "$LINKS_FILE" | head -n1 | tr -d '\r\n' || true)
             HY2_SNI=$(grep -oP 'hy2://[^\n]+sni=\K[^&#]+' "$LINKS_FILE" | head -n1 | tr -d '\r\n' || true)
         fi
         if [ -z "${PUBLIC_KEY:-}" ] && [ -n "${PRIVATE_KEY:-}" ] && [ -x /usr/local/bin/xray ]; then
             X25519_DERIVE=$(/usr/local/bin/xray x25519 -i "$PRIVATE_KEY" 2>/dev/null || true)
             PUBLIC_KEY=$(echo "$X25519_DERIVE" | awk -F': ' '/Public|Password/{print $2}' | tr -d ' \r\n')
         fi
-        CLIENT_FP=${CLIENT_FP:-chrome}
+        EDITION_TAG="$target_tag"
+        CLIENT_FP="chrome"
         HY2_SNI=${HY2_SNI:-turn.live.com}
 
-        if [ -n "${PORT:-}" ] && [ -n "${UUID:-}" ] && [ -n "${PRIVATE_KEY:-}" ] && [ -n "${HY2_PASS:-}" ]; then
+        if [ -n "${PORT:-}" ] && [ -n "${UUID:-}" ] && [ -n "${PRIVATE_KEY:-}" ] && [ -n "${PUBLIC_KEY:-}" ] && [ -n "${HY2_PASS:-}" ]; then
             return 0
         fi
     fi
@@ -97,9 +104,9 @@ nameserver 2001:4860:4860::8888
 DNS_EOF
 }
 
-# 高 BDP 跨洋长管道内核与极端并发网络栈优化
+# 高 BDP 跨洋长管道内核与极端并发网络栈优化（支持小内存海外 VPS 动态自适应）
 optimize_overseas_kernel() {
-    echo -e "${SKYBLUE}[2/7] 正在应用千兆满血高吞吐内核参数 (BBR + FQ + 32M/64M 缓冲 + TCP FastOpen)...${PLAIN}"
+    echo -e "${SKYBLUE}[2/7] 正在应用千兆满血高吞吐内核参数 (BBR + FQ + 智能分级缓冲 + TCP FastOpen)...${PLAIN}"
     export DEBIAN_FRONTEND=noninteractive
 
     # 安装基础依赖
@@ -112,17 +119,39 @@ optimize_overseas_kernel() {
         apt-get -o DPkg::Lock::Timeout=30 install -y curl wget openssl ufw jq unzip ca-certificates qrencode >/dev/null 2>&1 || true
     fi
 
-    # 针对海外主机商的大管道高并发配置 (TCP 缓冲区最大放开至 32MB/64MB)
+    # 针对海外小内存 VPS (如 512M/1G RackNerd/Claw/Akile) 自动补充 Swap 并动态调整内核缓冲，严防 TCP 内存压力锁死
+    local total_ram total_swap rmem_max tcp_max
+    total_ram=$(free -m | awk '/Mem:/{print $2}')
+    total_swap=$(free -m | awk '/Swap:/{print $2}')
+    if [ "$total_ram" -le 1200 ]; then
+        rmem_max=16777216
+        tcp_max=16777216
+        if [ "$total_swap" -lt 512 ]; then
+            echo -e "${YELLOW}   -> 检测到海外 VPS 物理内存为 ${total_ram}MB，自动挂载 1GB Swap 防止高并发 OOM...${PLAIN}"
+            swapoff /swapfile 2>/dev/null || true
+            dd if=/dev/zero of=/swapfile bs=1M count=1024 status=none 2>/dev/null || true
+            chmod 600 /swapfile
+            mkswap /swapfile >/dev/null 2>&1 || true
+            swapon /swapfile 2>/dev/null || true
+            if ! grep -q '/swapfile' /etc/fstab 2>/dev/null; then
+                echo '/swapfile none swap sw 0 0' >> /etc/fstab
+            fi
+        fi
+    else
+        rmem_max=67108864
+        tcp_max=33554432
+    fi
+
     rm -f /etc/sysctl.d/99-*.conf 2>/dev/null || true
-    cat << 'SYSCTL' > /etc/sysctl.d/99-overseas-giga-optimize.conf
+    cat << SYSCTL > /etc/sysctl.d/99-overseas-giga-optimize.conf
 net.core.default_qdisc = fq
 net.ipv4.tcp_congestion_control = bbr
-net.core.rmem_max = 67108864
-net.core.wmem_max = 67108864
+net.core.rmem_max = ${rmem_max}
+net.core.wmem_max = ${rmem_max}
 net.core.rmem_default = 4194304
 net.core.wmem_default = 4194304
-net.ipv4.tcp_rmem = 4096 87380 33554432
-net.ipv4.tcp_wmem = 4096 65536 33554432
+net.ipv4.tcp_rmem = 4096 87380 ${tcp_max}
+net.ipv4.tcp_wmem = 4096 65536 ${tcp_max}
 net.core.netdev_max_backlog = 100000
 net.core.somaxconn = 65535
 net.ipv4.tcp_max_syn_backlog = 3240000
@@ -131,9 +160,10 @@ net.ipv4.tcp_fastopen = 3
 net.ipv4.tcp_tw_reuse = 1
 net.ipv4.tcp_slow_start_after_idle = 0
 fs.file-max = 2097152
+vm.swappiness = 10
 SYSCTL
     sysctl --system >/dev/null 2>&1 || true
-    echo -e "${GREEN}   -> 千兆内核网络栈优化完毕，TCP 窗口与 UDP 缓冲区已完全放开！${PLAIN}"
+    echo -e "${GREEN}   -> 千兆内核网络栈优化完毕，TCP 窗口与 UDP 缓冲区已按物理内存 (${total_ram}MB) 最优放开！${PLAIN}"
 }
 
 # 安装或更新官方双核
@@ -151,6 +181,7 @@ install_cores() {
 # 生成 Hysteria 2 证书
 generate_hy2_cert() {
     local force_regen=${1:-false}
+    echo -e "${SKYBLUE}[4/7] 正在校验与签发 Hysteria 2 TLS 证书...${PLAIN}"
     mkdir -p /etc/hysteria
     if [ "$force_regen" = "true" ] || [ ! -f /etc/hysteria/server.crt ] || [ ! -f /etc/hysteria/server.key ]; then
         CERT_DAYS=$(shuf -i 365-1095 -n 1)
@@ -165,7 +196,8 @@ generate_hy2_cert() {
     fi
     chown -R hysteria:hysteria /etc/hysteria 2>/dev/null || true
     chmod 755 /etc/hysteria 2>/dev/null || true
-    chmod 644 /etc/hysteria/server.crt /etc/hysteria/server.key 2>/dev/null || true
+    chmod 644 /etc/hysteria/server.crt 2>/dev/null || true
+    chmod 600 /etc/hysteria/server.key 2>/dev/null || true
 }
 
 # 写入配置并应用狂暴性能守护策略
@@ -174,7 +206,7 @@ write_configs_and_start() {
 
     echo -e "${SKYBLUE}[5/7] 正在生成海外高吞吐专属配置 (激活 Brutal 暴力发包，无视晚高峰跨洋丢包)...${PLAIN}"
     
-    # 1. 写入 Xray 满血出站配置
+    # 1. 写入 Xray 满血出站配置 (serverNames 严格对齐 dest 目标证书 SAN)
     cat << XRAY_EOF > "$XRAY_CFG"
 {
   "log": {
@@ -202,8 +234,7 @@ write_configs_and_start() {
           "dest": "${SNI_DOMAIN}:443",
           "xver": 0,
           "serverNames": [
-            "${SNI_DOMAIN}",
-            "www.apple.com"
+            "${SNI_DOMAIN}"
           ],
           "privateKey": "${PRIVATE_KEY}",
           "shortIds": [
@@ -278,18 +309,25 @@ HY2_SNI="${HY2_SNI}"
 ENV_EOF
     chmod 600 "$ENV_FILE"
 
-    # 服务守护进程解除限制：支持百万级并发文件句柄
+    # 服务守护进程解除限制：支持百万级并发文件句柄，小内存机器自动注入 GOMEMLIMIT 防 OOM
+    local total_ram mem_limit_line=""
+    total_ram=$(free -m | awk '/Mem:/{print $2}')
+    if [ "$total_ram" -le 1200 ]; then
+        mem_limit_line="Environment=GOMEMLIMIT=256MiB"
+    fi
     mkdir -p /etc/systemd/system/xray.service.d /etc/systemd/system/hysteria-server.service.d
-    cat << 'OVERRIDE' > /etc/systemd/system/xray.service.d/override.conf
+    cat << OVERRIDE > /etc/systemd/system/xray.service.d/override.conf
 [Service]
+${mem_limit_line}
 LimitNOFILE=1048576
 LimitNPROC=512000
 Restart=always
 RestartSec=3
 OVERRIDE
 
-    cat << 'OVERRIDE' > /etc/systemd/system/hysteria-server.service.d/override.conf
+    cat << OVERRIDE > /etc/systemd/system/hysteria-server.service.d/override.conf
 [Service]
+${mem_limit_line}
 LimitNOFILE=1048576
 LimitNPROC=512000
 Restart=always
@@ -306,12 +344,19 @@ OVERRIDE
         ufw allow "${PORT}/udp" >/dev/null 2>&1 || true
         ufw disable >/dev/null 2>&1 || true
     fi
-    iptables -I INPUT -p tcp --dport "${PORT}" -j ACCEPT 2>/dev/null || true
-    iptables -I INPUT -p udp --dport "${PORT}" -j ACCEPT 2>/dev/null || true
+    iptables -C INPUT -p tcp --dport "${PORT}" -j ACCEPT 2>/dev/null || iptables -I INPUT -p tcp --dport "${PORT}" -j ACCEPT 2>/dev/null || true
+    iptables -C INPUT -p udp --dport "${PORT}" -j ACCEPT 2>/dev/null || iptables -I INPUT -p udp --dport "${PORT}" -j ACCEPT 2>/dev/null || true
 
+    echo -e "${SKYBLUE}[7/7] 正在启动并校验双栈服务运行状态...${PLAIN}"
     systemctl daemon-reload
     systemctl enable xray hysteria-server >/dev/null 2>&1 || true
-    ( systemctl restart xray hysteria-server >/dev/null 2>&1 & )
+    systemctl restart xray hysteria-server >/dev/null 2>&1 || true
+    sleep 1
+    if ! systemctl is-active --quiet xray || ! systemctl is-active --quiet hysteria-server; then
+        echo -e "${YELLOW}[提示] 检测到服务首次启动较慢，正在重试拉起...${PLAIN}"
+        chown -R hysteria:hysteria /etc/hysteria 2>/dev/null || true
+        systemctl restart xray hysteria-server || true
+    fi
 }
 
 # 输出双节点链接与本地配置
@@ -389,7 +434,13 @@ change_port() {
         exit 1
     fi
     source "$ENV_FILE"
-    NEW_PORT=$(shuf -i 20000-60000 -n 1)
+    local NEW_PORT
+    while true; do
+        NEW_PORT=$(shuf -i 20000-60000 -n 1)
+        if [ "$NEW_PORT" != "$PORT" ] && ! ss -tuln | awk '{print $5}' | grep -qE ":${NEW_PORT}$"; then
+            break
+        fi
+    done
     echo -e "\033[0;33m正在将节点端口从 ${PORT} 切换为全新随机端口: ${NEW_PORT}...\033[0m"
     sed -i "s/\"port\": ${PORT}/\"port\": ${NEW_PORT}/g" /usr/local/etc/xray/config.json
     sed -i "s/listen: :${PORT}/listen: :${NEW_PORT}/g" /etc/hysteria/config.yaml
@@ -397,8 +448,11 @@ change_port() {
     
     iptables -I INPUT -p tcp --dport "${NEW_PORT}" -j ACCEPT 2>/dev/null || true
     iptables -I INPUT -p udp --dport "${NEW_PORT}" -j ACCEPT 2>/dev/null || true
+    iptables -D INPUT -p tcp --dport "${PORT}" -j ACCEPT 2>/dev/null || true
+    iptables -D INPUT -p udp --dport "${PORT}" -j ACCEPT 2>/dev/null || true
     systemctl restart xray hysteria-server
     
+    sed -i "s/: ${PORT}/: ${NEW_PORT}/g" "$LINKS_FILE"
     sed -i "s/:${PORT}/:${NEW_PORT}/g" "$LINKS_FILE"
     echo -e "\033[0;32m[成功] 端口已切换为 ${NEW_PORT}！\033[0m"
     cat "$LINKS_FILE"
@@ -432,13 +486,13 @@ main() {
         SHORT_ID=$(openssl rand -hex 5)
         HY2_PASS=$(openssl rand -base64 18 | tr -dc 'a-zA-Z0-9' | head -c 24)
         
-        # 预先生成 REALITY X25519 密钥
+        # 预先生成 REALITY X25519 密钥（兼容新旧版 Xray-core 输出格式）
         if ! command -v xray >/dev/null 2>&1; then
             bash -c "$(curl -L https://github.com/XTLS/Xray-install/raw/main/install-release.sh)" @ install >/dev/null
         fi
         X25519_KEYPAIR=$(/usr/local/bin/xray x25519)
-        PRIVATE_KEY=$(echo "$X25519_KEYPAIR" | awk -F': ' '/Private key/{print $2}' | tr -d ' \r\n')
-        PUBLIC_KEY=$(echo "$X25519_KEYPAIR" | awk -F': ' '/Public key/{print $2}' | tr -d ' \r\n')
+        PRIVATE_KEY=$(echo "$X25519_KEYPAIR" | awk -F': ' '/Private/{print $2}' | tr -d ' \r\n')
+        PUBLIC_KEY=$(echo "$X25519_KEYPAIR" | awk -F': ' '/Public|Password/{print $2}' | tr -d ' \r\n')
     fi
 
     setup_network_env
