@@ -1,124 +1,116 @@
 <div align="center">
 
-# ⚡ v2rayN / Xray & Hysteria 2 极速并发安装脚本 (v3.1 旗舰版)
+# ⚡ v2rayN 多厂商智能自适应双栈脚本 (v3.2 旗舰版)
 
-> 单端口四层协议栈并发黑科技：TCP (VLESS-Reality) + UDP (Hysteria 2) 零冲突共存  
-> **全自动随机安全端口 • 老用户无感热更新 (保留原端口/链接) • 全局 `v2rayn` 快捷管理 • 抗指纹 X509v3 证书**
+> **首创区分国内主流云厂商与海外常规 VPS 的智能分类优化架构**  
+> 单端口四层协议栈并发黑科技：**TCP (VLESS-Reality) + UDP (Hysteria 2) 零冲突共存**  
+> **AI 宿主机环境自动侦测 • 深度切除大厂流氓监控 • 内存防爆机制 • 规避机房 1Mbps 惩罚限速 • 海外千兆 Brutal 满血抗丢包**
 
 [![License](https://img.shields.io/badge/license-MIT-blue.svg?style=flat-square)](LICENSE)
-[![Release](https://img.shields.io/badge/release-v3.1%20Flagship-brightgreen.svg?style=flat-square)](https://github.com/zyjshb/v2rayN)
+[![Release](https://img.shields.io/badge/release-v3.2%20Adaptive-brightgreen.svg?style=flat-square)](https://github.com/zyjshb/v2rayN)
 [![Platform](https://img.shields.io/badge/platform-Ubuntu%2020.04%2B%20%7C%20Debian%2011%2B-orange.svg?style=flat-square)](https://github.com/zyjshb/v2rayN)
-[![Protocol](https://img.shields.io/badge/protocols-VLESS--Reality%20%7C%20Hy2-success.svg?style=flat-square)](https://github.com/zyjshb/v2rayN)
-[![Network](https://img.shields.io/badge/Bandwidth-200M%2B%20Uncapped-red.svg?style=flat-square)](https://github.com/zyjshb/v2rayN)
+[![Protocols](https://img.shields.io/badge/protocols-VLESS--Reality%20%7C%20Hysteria%202-success.svg?style=flat-square)](https://github.com/zyjshb/v2rayN)
+[![Adaptive](https://img.shields.io/badge/QoS--Bypass-Smart%20Dynamic-red.svg?style=flat-square)](https://github.com/zyjshb/v2rayN)
 
-[一键安装与无感更新](#-一键安装与无感更新) • [v3.1 旗舰特性](#-v31-旗舰级特性升级) • [快捷管理命令](#-v2rayn-全局快捷管理命令) • [客户端支持](#-客户端导入说明)
+[⚡ 快速开始](#-快速开始一键运行) • [🎯 两大版本核心对比](#-两大版本核心调优对比) • [🛠️ 快捷管理命令](#️-v2rayn-快捷管理命令) • [📱 客户端配置指南](#-客户端配置指引)
 
 </div>
 
 ---
 
-## 💡 为什么选择本项目？
+## 💡 为什么需要区分国内大厂云与海外 VPS？
 
-传统脚本要么操作繁琐，要么**写死默认端口与固定 3650 天自签名证书**，极易被防火墙批量嗅探封锁。
+不同厂商的机房环境和风控机制存在巨大差异，**用同一套粗放的参数去跑所有服务器必然踩坑**：
 
-本项目利用 Linux 底层传输层 TCP 与 UDP 独立命名空间原理，实现**同一个端口同时并发运行两大王牌协议**，并在 **v3.1 旗舰版**中实现了**「新装零交互自动给随机端口」+「老用户一行指令无损热更新」**：
+1. **国内主流云厂商（阿里云 / 腾讯云 / 华为云等海外轻量与 ECS）**：
+   * **痛点**：预装大厂监控探针（Aegis、云镜、Tat、HostGuard）常驻吃掉 150MB~250MB 内存；宿主机拥有极其严苛的 **“动态令牌桶 QoS”**，一旦 Hysteria 2 启用 Brutal 暴力发包冲高 PPS，机房云盾立刻将其标记为“异常 UDP 洪流”，**直接把虚拟机总带宽掐死在 1Mbps（128 KB/s）小黑屋**；加上 1GB 小内存如果乱开 32MB+ 缓冲区，会立刻触发 Linux 内核 TCP 内存压力降速。
+   * **对策**：必须深度外科手术式切除大厂监控；启用平滑 **QUIC-BBR** 拥塞控制；将内核缓冲控制在 16MB 黄金安全线；自动补充 1GB 紧凑 Swap，限制 Go 运行时内存防 OOM。
 
-```
-                                   ┌──► TCP (随机端口) ──► Xray VLESS + XTLS-Vision + REALITY (动态大厂证书隐身)
-客户端数据请求 ───► [同一高安全随机端口]
-                                   └──► UDP (随机端口) ──► Hysteria 2 + Salamander + SHA256 指纹锁 (暴力跑满 200M)
-```
+2. **海外主流 VPS 厂商（RackNerd / DMIT / 搬瓦工 / ClawCloud / Akile / V.PS 等）**：
+   * **特点**：纯净无监控，网络端口普遍给足 **1Gbps ~ 2.5Gbps** 且不限速；痛点在于**中美跨洋等长距离骨干网在晚高峰时存在 5%~15% 的高丢包率**。
+   * **对策**：彻底解除发包封印！激活满血 **Hysteria 2 Brutal 暴力算法**，配合 32M~64M 高 BDP 跨洋长肥管道调优、TCP Fast Open 与百万并发句柄，以暴力多发包直接碾碎跨洋网络抖动。
 
 ---
 
-## 🚀 一键安装与无感更新
+## 🚀 快速开始：一键运行
 
-以 `root` 用户登录服务器，复制对应命令直接运行：
-
-### 1️⃣ 全新安装（零交互全自动生成随机安全端口，装完去安全组放行即可）
+### 🤖 方式 A：全智能全自适应总入口（推荐，自动判断宿主机）
+脚本会自动通过云元数据、DMI 硬件特征及网络 ASN 研判宿主机身份，并智能匹配最优调优方案：
 ```bash
 bash <(curl -fsSL https://raw.githubusercontent.com/zyjshb/v2rayN/main/install.sh)
 ```
-> 💡 **极简体验**：新机器运行无需任何键盘输入，脚本会自动避开已占用端口，为你随机分配一个 `20000~60000` 之间的干净高位端口，并在最后醒目提示你需要去云控制台安全组放行该端口！
+> 💡 支持参数快速直达：  
+> - 强制国内大厂模式：`bash <(curl -fsSL https://raw.githubusercontent.com/zyjshb/v2rayN/main/install.sh) --cn`  
+> - 强制海外狂暴模式：`bash <(curl -fsSL https://raw.githubusercontent.com/zyjshb/v2rayN/main/install.sh) --overseas`  
+> - 原有老用户无感热更新：`bash <(curl -fsSL https://raw.githubusercontent.com/zyjshb/v2rayN/main/install.sh) update`
 
-### 2️⃣ 老用户一键「无感热更新」（保留原有端口、密钥和客户端链接 100% 不变！）
+---
+
+### 🇨🇳 方式 B：国内主流云厂商特调直装版
+专门针对 **阿里云 (Aliyun)、腾讯云 (Tencent Cloud)、华为云 (Huawei Cloud)、百度云、移动云** 海外轻量服务器及 ECS 定制：
 ```bash
-bash <(curl -fsSL https://raw.githubusercontent.com/zyjshb/v2rayN/main/install.sh) update
+bash <(curl -fsSL https://raw.githubusercontent.com/zyjshb/v2rayN/main/install-cn.sh)
 ```
-> 🔄 **无缝升级**：如果你之前已经安装过旧版本，运行此命令会**自动提取并保留你现有的端口号、UUID、密码和节点链接**，在后台无缝升级最新内核、BBR+TFO 调优、BT 防投诉拦截与进程崩溃自愈，**手机和电脑客户端无需重新导入节点！**
+* **彻底拔除云监控**：自动切除 `Aegis(安骑士)`、`YunJing(云镜)`、`tat_agent`、`hostguard` 等常驻监控，释放 180MB 内存并屏蔽内网嗅探。
+* **规避机房 1Mbps 锁死**：强制采用平滑 **QUIC-BBR** 发包模式（`ignoreClientBandwidth: true`），发包节奏如同正常网页浏览，绝不触发机房防 DDoS 惩罚限速。
+* **小内存自愈保护**：物理内存 $\le 1\text{GB}$ 时自动配置 1GB 紧凑 Swap，注入 `GOMEMLIMIT=256MiB`，杜绝突发并发导致内核 OOM 崩溃。
+* **拟态白名单 SNI**：选用 Apple CDN 官方权威域名与 Safari 伪装指纹，彻底消除主动探测特征。
 
 ---
 
-## 🛡️ v3.1 旗舰级特性升级
+### 🌍 方式 C：海外主流 VPS 厂商特调直装版
+专门针对 **RackNerd、DMIT、搬瓦工 (BandwagonHost)、ClawCloud、AkileCloud、V.PS、Vultr、Linode、Hetzner** 等海外主机商定制：
+```bash
+bash <(curl -fsSL https://raw.githubusercontent.com/zyjshb/v2rayN/main/install-overseas.sh)
+```
+* **满血千兆 Brutal 暴力抗丢包**：服务端与客户端放开 1Gbps 发包能力，晚高峰遇 10% 跨洋丢包也能瞬间秒开 4K/8K 视频。
+* **高 BDP 长管道内核重构**：TCP/UDP 缓冲区放大至 32MB~64MB，开启 `tcp_fastopen = 3` 与 FQ 队列，使跨洋长距离 TCP 单连接迅速跑满。
+* **解除并发连接限制**：自动注入 Systemd `LimitNOFILE=1048576` 百万级并发句柄，支持海量连接无阻断。
+* **原生全球 DNS 与 IPv4/IPv6 双栈优化**：权威双栈解析，原生支持 ChatGPT、Claude、Grok 等 AI 工具及全球流媒体。
 
-| 模块维度 | 传统脚本痛点 | 本项目 v3.1 旗舰解决方案 |
+---
+
+## 🎯 两大版本核心调优对比
+
+| 调优维度 | 🇨🇳 国内主流云特调版 (`install-cn.sh`) | 🌍 海外主流 VPS 特调版 (`install-overseas.sh`) |
 | :--- | :--- | :--- |
-| **零打扰随机端口** | 安装时反复追问配置，或者所有人共用死端口 | 全新安装**零交互自动生成 `20000~60000` 未占用高位端口**，结尾高亮提醒安全组放行 |
-| **老用户无感热更新** | 每次更新脚本都会重置端口和密钥，需重新配客户端 | 内置逆向配置提取引擎，支持 `update` **原位无损升级**，原端口与客户端链接完全不变 |
-| **全局 `v2rayn` 命令** | 装完找不到管理入口，记不住复杂 systemctl 命令 | 自动注册系统级 **`v2rayn` 快捷指令**，支持可视化菜单、查链接、扫码、改端口、重启、卸载 |
-| **REALITY 动态优选池** | 写死单一域名，容易特征聚集或路由阻断 | 内置 **Apple / Microsoft / AMD 等 TLS 1.3 大厂域名池**，安装时自动测速握手并随机分配浏览器指纹 |
-| **Hy2 证书抗指纹** | 固定 `3650` 天有效期、单一 CN、无扩展，一探即露馅 | **随机证书有效期 (`365~1095` 天)** + **随机跨国企业组织 (`O`)** + **完整 X509v3 SAN 扩展** + **`pinSHA256` 指纹锁** |
-| **高并发防崩自愈** | 200M 跑满时默认 `1024` 句柄耗尽导致进程假死断流 | 自动注入 Systemd `LimitNOFILE=1048576` 百万级并发句柄与 `Restart=always` 3秒自动复活保护 |
-| **云监控深度切除** | 仅清理简单进程，残留云助手探针 | 全自动卸载 **阿里云 (Aegis/云助手)、腾讯云 (Tat/Barad/云镜)、华为云 (HostGuard)** 监控全家桶 |
+| **适配厂商** | 阿里云、腾讯云、华为云、百度云等出海机型 | RackNerd、DMIT、搬瓦工、Claw、Akile、Vultr 等 |
+| **内存与监控策略** | **深度切除大厂监控**，释放 180M 内存；1G Swap 防爆 | 原生极简纯净系统，30 秒秒速就绪 |
+| **Hysteria 2 算法** | **平滑 QUIC-BBR**（`ignoreClientBandwidth: true`） | **满血 Brutal 暴力发包**（最高达 1Gbps~2.5Gbps） |
+| **机房风控防范** | **规避令牌桶 QoS**，杜绝触发机房 1Mbps 限速小黑屋 | 海外机房不限速，专注抗击晚高峰国际骨干网高丢包 |
+| **内核网络缓冲** | 严格限制在 16MB 内（防止 1G 内存触发 TCP 内存压力降速） | 大管道放宽至 32MB~64MB，开启 TCP FastOpen |
+| **SNI 伪装优选** | Apple CDN 官方真实白名单 + Safari 指纹 | Microsoft 官方权威域 + Chrome 指纹 |
+| **单端口双栈共存** | 支持 (TCP: VLESS-Reality + UDP: Hy2) | 支持 (TCP: VLESS-Reality + UDP: Hy2) |
 
 ---
 
-## 🛠️ `v2rayn` 全局快捷管理命令
+## 🛠️ `v2rayn` 快捷管理命令
 
-安装或更新完成后，在服务器终端随时输入 **`v2rayn`** 即可调出管理面板或执行快捷操作：
+安装完成后，在服务器终端随时输入 **`v2rayn`** 即可打开可视化管理面板：
 
-| 快捷命令 | 功能说明 |
-| :--- | :--- |
-| `v2rayn` | 打开交互式可视化管理面板（默认回车即为无感热更新） |
-| `v2rayn update` | **无感热更新**：保留原端口与原链接不变，升级最新内核与安全配置 |
-| `v2rayn info` | 查看当前双协议纯文本节点链接及需放行的端口号 |
-| `v2rayn qr` | **按需显示二维码**：在终端打印双节点二维码供手机扫码导入 |
-| `v2rayn port` | **仅更换端口**：保留原有密钥，一键切换为新随机端口 |
-| `v2rayn restart` | 一键重启 Xray 与 Hysteria 2 双栈服务 |
-| `v2rayn status` | 查看双栈服务实时运行状态与日志 |
-| `v2rayn uninstall` | 彻底卸载服务并清理所有残留文件 |
-
----
-
-## 🖥️ 终端部署效果预览
-
-```text
-========================================================================
-🎉 单端口 [54321] 双协议并发部署完成 (v3.1 旗舰安全版)
-========================================================================
-• TCP 54321 状态 (Xray VLESS-Reality-Vision): active (running)
-• UDP 54321 状态 (Hysteria 2 + Salamander) : active (running)
-• REALITY 伪装目标 : www.microsoft.com (指纹: firefox)
-• Hy2 媒体伪装目标 : stun.teams.microsoft.com
-• BT 迅雷流量拦截  : 已开启 (防止版权投诉封机)
-------------------------------------------------------------------------
-1. 【Hysteria 2 满血暴力节点】（UDP 54321 | 200M 提速 | Salamander 混淆）：
-hy2://Pass@203.0.113.10:54321/?insecure=1&pinSHA256=E9:3B:...&sni=stun.teams.microsoft.com&obfs=salamander...
-
-2. 【VLESS-Reality 隐身防封节点】（TCP 54321 | Vision 流控 | 大厂证书伪装）：
-vless://uuid@203.0.113.10:54321?encryption=none&flow=xtls-rprx-vision&security=reality&sni=www.microsoft.com&fp=firefox...
-========================================================================
-⚠️ 【重要一步】请前往您的云服务商控制台 ->「安全组 / 防火墙」放行以下端口：
-👉 协议: TCP + UDP   |   端口范围: 54321
-------------------------------------------------------------------------
-💡 快捷管理命令：
-   • 输入 v2rayn       打开管理面板 / 无感更新
-   • 输入 v2rayn info  查看纯文本节点链接
-   • 输入 v2rayn qr    按需生成手机扫码二维码
-========================================================================
+```bash
+v2rayn          # 打开图形交互管理面板
+v2rayn port     # 一键更换全新随机端口 (保留原密钥与配置，防单端口被封)
+v2rayn status   # 查看双栈服务实时运行状态
+v2rayn restart  # 平滑重启 Xray 与 Hysteria 2 服务
 ```
 
 ---
 
-## 📱 客户端导入说明
+## 📱 客户端配置指引
 
-本脚本输出的标准链接与二维码支持市面上所有主流客户端：
+### 1. v2rayN (Windows)
+* 建议配合 v2rayN 最新版（内含 `sing_box` 或 `Xray` 双核心）。
+* **VLESS-Reality 节点**：直接复制导入即用，日常主力推荐（最隐蔽、最安全）。
+* **Hysteria 2 节点**：导入后右键“编辑服务器”，确保跳过证书验证已勾选；测试延时请使用 **“测试真实延时 (Ctrl+O)”**（因为 Hy2 是纯 UDP，普通 Tcping 会显示 `-1`）。
 
-- **Windows**: [v2rayN](https://github.com/233boy/v2rayN) / [Clash Verge Rev](https://github.com/clash-verge-rev/clash-verge-rev) / [Sing-box](https://github.com/SagerNet/sing-box)
-- **Android**: [v2rayNG](https://github.com/233boy/v2rayNG) / [NekoBox](https://github.com/MatsuriDayo/NekoBoxForAndroid)
-- **iOS / macOS**: [Sing-box](https://sing-box.sagernet.org/) / [Shadowrocket](https://apps.apple.com/app/shadowrocket/id932747118) / [Loon](https://nsloon.com/) / [Surge](https://nssurge.com/)
+### 2. Clash Verge / Mihomo (Windows / Mac)
+* 客户端自带的 Mihomo 内核原生完美支持两大协议，可在配置文件的 `proxies` 中直接填入：
+  - Hysteria 2：`type: hysteria2`, `alpn: [h3]`, `skip-cert-verify: true`
+  - VLESS-Reality：`type: vless`, `flow: xtls-rprx-vision`, `reality-opts: { public-key: ..., short-id: ... }`
 
 ---
 
-## ⚠️ 免责声明
-本项目仅供网络技术研究、传输层安全测试与合法运维使用，请严格遵守您所在地区的法律法规。
+## 📄 开源许可证
+
+本项目基于 [MIT License](LICENSE) 协议完全开源，纯净直接，安全无后门。
