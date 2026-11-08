@@ -1,8 +1,8 @@
 # ==============================================================================
-# Clash Verge / Mihomo (Clash.Meta) - Hysteria 2 通用狂暴千兆模板
+# Clash Verge / Mihomo (Clash.Meta) - Hysteria 2 通用狂暴千兆模板 (满血防污染版)
 # 文件名称: clash_hysteria2_template.yaml
 # 使用说明: 请使用文本编辑器打开此文件，将下方【proxies】区域的参数替换为你自己的节点信息
-# 注意事项: 请勿直接运行，必须根据你的 hy2:// 链接修改对应占位符！
+# 注意事项: 本模板不包含任何个人隐私数据，请根据你的 hy2:// 链接修改对应占位符！
 # ==============================================================================
 
 port: 7890
@@ -10,25 +10,61 @@ socks-port: 7891
 mixed-port: 7892
 allow-lan: false
 mode: rule
-log-level: info
+log-level: warning
 ipv6: false
+unified-delay: true
+tcp-concurrent: true
+find-process-mode: strict
 external-controller: 127.0.0.1:9097
 geodata-mode: true
 
 # ------------------------------------------------------------------------------
-# 内置 DNS 优化解析 (防止 DNS 污染并支持海外流媒体与 AI 秒开)
+# 域名嗅探器 (加速精准分流，排除 Cloudflare 验证防止死循环)
+# ------------------------------------------------------------------------------
+sniffer:
+  enable: true
+  parse-pure-ip: true
+  override-destination: false
+  sniff:
+    HTTP:
+      ports: [80, 8080-8880]
+    TLS:
+      ports: [443, 8443]
+    QUIC:
+      ports: [443, 8443]
+  skip-domain:
+    - "+.push.apple.com"
+    - "+.challenges.cloudflare.com"
+
+# ------------------------------------------------------------------------------
+# 防污染极速 DNS (采用加密 DoH + Fake-IP 过滤，秒开网页且防止 Windows 网络感叹号)
 # ------------------------------------------------------------------------------
 dns:
   enable: true
   listen: 127.0.0.1:1053
   ipv6: false
+  prefer-h3: true
   enhanced-mode: fake-ip
   fake-ip-range: 198.18.0.1/16
-  nameserver:
+  fake-ip-filter:
+    - "*.lan"
+    - "*.local"
+    - "+.msftconnecttest.com"
+    - "+.msftncsi.com"
+    - "localhost.ptlogin2.qq.com"
+    - "+.srv.nintendo.net"
+    - "+.stun.playstation.net"
+    - "xbox.*.microsoft.com"
+    - "+.xboxlive.com"
+    - "+.stun.*"
+    - "time.*.com"
+    - "ntp.*.com"
+  default-nameserver:
     - 223.5.5.5
     - 119.29.29.29
-    - 1.1.1.1
-    - 8.8.8.8
+  nameserver:
+    - https://dns.alidns.com/dns-query
+    - https://doh.pub/dns-query
 
 # ------------------------------------------------------------------------------
 # 节点配置区域 (核心修改区域：请根据你的 hy2:// 链接对应替换)
@@ -38,6 +74,8 @@ proxies:
     type: hysteria2                 # [固定值] 协议类型必须为 hysteria2
     server: 1.2.3.4                 # [修改] 服务器公网 IP 地址或你的解析域名
     port: 25000                     # [修改] 服务器对应的 Hysteria 2 端口
+    # ports: 20000-50000            # [可选防封] 若服务端已开启端口跳跃，可取消此行注释实现动态端口横跳
+    # hop-interval: 30              # [可选防封] 每 30 秒自动切换一次通信端口，彻底粉碎运营商 UDP 限速
     password: "YourPasswordHere"    # [修改] 你的连接认证密码 (注意保留英文双引号)
     sni: turn.live.com              # [修改] SNI 伪装域名 (如 turn.live.com 或你的域名)
     skip-cert-verify: true          # [设置] 若为自签证书/insecure=1请填 true；若有正规证书填 false
@@ -71,13 +109,20 @@ rules:
   - DOMAIN-SUFFIX,openai.com,AI
   - DOMAIN-SUFFIX,chatgpt.com,AI
   - DOMAIN-SUFFIX,claude.ai,AI
+  - DOMAIN-SUFFIX,anthropic.com,AI
   - DOMAIN-SUFFIX,gemini.google.com,AI
-  # 谷歌与主流海外视听
+  - DOMAIN-SUFFIX,notebooklm.google.com,AI
+  - DOMAIN-SUFFIX,perplexity.ai,AI
+  # 谷歌、GitHub 与主流海外视听
   - DOMAIN-SUFFIX,google.com,PROXY
   - DOMAIN-SUFFIX,youtube.com,PROXY
   - DOMAIN-SUFFIX,googlevideo.com,PROXY
+  - DOMAIN-SUFFIX,ytimg.com,PROXY
+  - DOMAIN-SUFFIX,github.com,PROXY
+  - DOMAIN-SUFFIX,githubusercontent.com,PROXY
   - DOMAIN-KEYWORD,google,PROXY
-  # 国内网站直连（不走代理，省服务器流量）
+  # 局域网与国内网站直连（不走代理，省服务器流量）
+  - GEOIP,LAN,DIRECT,no-resolve
   - GEOIP,CN,DIRECT
   # 其他未命中规则的海外网站默认走代理
   - MATCH,PROXY
