@@ -490,10 +490,24 @@ dns:
     - https://doh.pub/dns-query
 
 proxies:
-  - name: "⚡ Hysteria2-千兆狂暴"
+  - name: "⚡ Hysteria2-千兆直连"
     type: hysteria2
     server: ${SERVER_IP}
     port: ${PORT}
+    password: "${HY2_PASS}"
+    sni: ${HY2_SNI}
+    skip-cert-verify: true
+    alpn:
+      - h3
+    up: "100 Mbps"
+    down: "1000 Mbps"
+
+  - name: "🛡️ Hysteria2-端口跳跃"
+    type: hysteria2
+    server: ${SERVER_IP}
+    port: ${PORT}
+    ports: ${HOP_START}-${HOP_END}
+    hop-interval: 30
     password: "${HY2_PASS}"
     sni: ${HY2_SNI}
     skip-cert-verify: true
@@ -521,8 +535,9 @@ proxy-groups:
   - name: "PROXY"
     type: select
     proxies:
+      - "⚡ Hysteria2-千兆直连"
+      - "🛡️ Hysteria2-端口跳跃"
       - "🔄 智能故障回退(HY2优先)"
-      - "⚡ Hysteria2-千兆狂暴"
       - "🛡️ VLESS-Reality-TCP防封备用"
       - DIRECT
 
@@ -532,13 +547,15 @@ proxy-groups:
     interval: 180
     lazy: true
     proxies:
-      - "⚡ Hysteria2-千兆狂暴"
+      - "⚡ Hysteria2-千兆直连"
+      - "🛡️ Hysteria2-端口跳跃"
       - "🛡️ VLESS-Reality-TCP防封备用"
 
   - name: "AI"
     type: select
     proxies:
-      - "⚡ Hysteria2-千兆狂暴"
+      - "⚡ Hysteria2-千兆直连"
+      - "🛡️ Hysteria2-端口跳跃"
       - "🛡️ VLESS-Reality-TCP防封备用"
 
 rules:
