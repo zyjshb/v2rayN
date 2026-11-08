@@ -699,7 +699,7 @@ CLI_EOF
 # 主执行流程
 main() {
     local mode="fresh"
-    if [ "${1:-}" = "update" ] || extract_existing_config; then
+    if extract_existing_config; then
         mode="update"
         echo -e "${GREEN}>> 锁定已有配置 -> 端口: ${PORT} | 伪装站: ${SNI_DOMAIN}${PLAIN}"
     else
