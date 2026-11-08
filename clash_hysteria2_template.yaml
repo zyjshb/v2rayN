@@ -1,0 +1,83 @@
+# ==============================================================================
+# Clash Verge / Mihomo (Clash.Meta) - Hysteria 2 通用狂暴千兆模板
+# 文件名称: clash_hysteria2_template.yaml
+# 使用说明: 请使用文本编辑器打开此文件，将下方【proxies】区域的参数替换为你自己的节点信息
+# 注意事项: 请勿直接运行，必须根据你的 hy2:// 链接修改对应占位符！
+# ==============================================================================
+
+port: 7890
+socks-port: 7891
+mixed-port: 7892
+allow-lan: false
+mode: rule
+log-level: info
+ipv6: false
+external-controller: 127.0.0.1:9097
+geodata-mode: true
+
+# ------------------------------------------------------------------------------
+# 内置 DNS 优化解析 (防止 DNS 污染并支持海外流媒体与 AI 秒开)
+# ------------------------------------------------------------------------------
+dns:
+  enable: true
+  listen: 127.0.0.1:1053
+  ipv6: false
+  enhanced-mode: fake-ip
+  fake-ip-range: 198.18.0.1/16
+  nameserver:
+    - 223.5.5.5
+    - 119.29.29.29
+    - 1.1.1.1
+    - 8.8.8.8
+
+# ------------------------------------------------------------------------------
+# 节点配置区域 (核心修改区域：请根据你的 hy2:// 链接对应替换)
+# ------------------------------------------------------------------------------
+proxies:
+  - name: "⚡ 我的Hysteria2节点"      # [自定义] 节点在客户端里显示的名称
+    type: hysteria2                 # [固定值] 协议类型必须为 hysteria2
+    server: 1.2.3.4                 # [修改] 服务器公网 IP 地址或你的解析域名
+    port: 25000                     # [修改] 服务器对应的 Hysteria 2 端口
+    password: "YourPasswordHere"    # [修改] 你的连接认证密码 (注意保留英文双引号)
+    sni: turn.live.com              # [修改] SNI 伪装域名 (如 turn.live.com 或你的域名)
+    skip-cert-verify: true          # [设置] 若为自签证书/insecure=1请填 true；若有正规证书填 false
+    alpn:
+      - h3                          # [固定值] HTTP/3 协商标准
+    up: "100 Mbps"                  # [性能] 客户端上行期望 (推荐 50~100 Mbps)
+    down: "1000 Mbps"               # [性能] 客户端下行期望 (填 1000 Mbps 激活 Brutal 满血千兆发包)
+
+# ------------------------------------------------------------------------------
+# 策略组配置 (已绑定上面的节点名称)
+# ------------------------------------------------------------------------------
+proxy-groups:
+  - name: "PROXY"
+    type: select
+    proxies:
+      - "⚡ 我的Hysteria2节点"      # 这里的名字必须与上方 proxies[0].name 保持完全一致
+      - DIRECT
+
+  - name: "AI"
+    type: select
+    proxies:
+      - "⚡ 我的Hysteria2节点"      # 专门走大模型流量 (ChatGPT / Claude / Gemini / Grok)
+
+# ------------------------------------------------------------------------------
+# 分流规则 (国内直连不耗流量，海外与 AI 智能分流走代理)
+# ------------------------------------------------------------------------------
+rules:
+  # 顶级 AI 大模型智能分流
+  - DOMAIN-SUFFIX,grok.com,AI
+  - DOMAIN-SUFFIX,x.ai,AI
+  - DOMAIN-SUFFIX,openai.com,AI
+  - DOMAIN-SUFFIX,chatgpt.com,AI
+  - DOMAIN-SUFFIX,claude.ai,AI
+  - DOMAIN-SUFFIX,gemini.google.com,AI
+  # 谷歌与主流海外视听
+  - DOMAIN-SUFFIX,google.com,PROXY
+  - DOMAIN-SUFFIX,youtube.com,PROXY
+  - DOMAIN-SUFFIX,googlevideo.com,PROXY
+  - DOMAIN-KEYWORD,google,PROXY
+  # 国内网站直连（不走代理，省服务器流量）
+  - GEOIP,CN,DIRECT
+  # 其他未命中规则的海外网站默认走代理
+  - MATCH,PROXY

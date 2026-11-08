@@ -106,8 +106,14 @@ v2rayn restart  # 平滑重启 Xray 与 Hysteria 2 服务
 
 ### 2. Clash Verge / Mihomo (Windows / Mac)
 * 客户端自带的 Mihomo 内核原生完美支持两大协议，可在配置文件的 `proxies` 中直接填入：
-  - Hysteria 2：`type: hysteria2`, `alpn: [h3]`, `skip-cert-verify: true`
+  - Hysteria 2：`type: hysteria2`, `alpn: [h3]`, `skip-cert-verify: true`, `down: "1000 Mbps"`
   - VLESS-Reality：`type: vless`, `flow: xtls-rprx-vision`, `reality-opts: { public-key: ..., short-id: ... }`
+
+### 3. 🎯 Hysteria 2 转 Clash Verge 专属模板与教程
+针对 `hy2://` 链接无法直接导入 Clash 的问题，本项目提供了开箱即用的通用模板与 30 秒转换教程（**完全保护隐私，无任何个人信息**）：
+* 📄 **通用配置文件模板**：[`clash_hysteria2_template.yaml`](clash_hysteria2_template.yaml)
+* 📘 **图文转换与导入教程**：[`HOW_TO_USE_CLASH_TEMPLATE.md`](HOW_TO_USE_CLASH_TEMPLATE.md)
+* 用户只需复制模板，将自己的 IP、端口、密码填入，即可导入 Clash Verge 享受 1000M 狂暴加速！
 
 ---
 
