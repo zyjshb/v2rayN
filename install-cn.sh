@@ -314,15 +314,6 @@ tls:
   key: /etc/hysteria/server.key
 
 ignoreClientBandwidth: true
-speedTest: true
-
-quic:
-  initStreamReceiveWindow: 8388608
-  maxStreamReceiveWindow: 16777216
-  initConnReceiveWindow: 16777216
-  maxConnReceiveWindow: 33554432
-  maxIdleTimeout: 30s
-  keepAlivePeriod: 10s
 
 auth:
   type: password

@@ -147,7 +147,7 @@ optimize_overseas_kernel() {
     total_ram=$(free -m | awk '/Mem:/{print $2}')
     total_swap=$(free -m | awk '/Swap:/{print $2}')
     if [ "$total_ram" -le 1200 ]; then
-        rmem_max=33554432
+        rmem_max=16777216
         tcp_max=16777216
         if [ "$total_swap" -lt 512 ]; then
             echo -e "${YELLOW}   -> 检测到海外 VPS 物理内存为 ${total_ram}MB，自动挂载 1GB Swap 防止高并发 OOM...${PLAIN}"
@@ -357,7 +357,7 @@ write_configs_and_start() {
 }
 XRAY_EOF
 
-    # 2. 写入 Hysteria 2 狂暴满血配置 (千兆带宽 + Brutal 算法 + QUIC 大流控窗口)
+    # 2. 写入 Hysteria 2 狂暴满血配置 (千兆带宽 + Brutal 算法)
     cat << HY2_EOF > "$HY2_CFG"
 listen: :${PORT}
 
@@ -368,17 +368,6 @@ tls:
 bandwidth:
   up: 1 gbps
   down: 1 gbps
-
-ignoreClientBandwidth: false
-speedTest: true
-
-quic:
-  initStreamReceiveWindow: 16777216
-  maxStreamReceiveWindow: 16777216
-  initConnReceiveWindow: ${conn_win}
-  maxConnReceiveWindow: ${conn_win}
-  maxIdleTimeout: 30s
-  keepAlivePeriod: 10s
 
 auth:
   type: password
@@ -501,12 +490,10 @@ dns:
     - https://doh.pub/dns-query
 
 proxies:
-  - name: "⚡ Hysteria2-千兆狂暴(端口跳跃)"
+  - name: "⚡ Hysteria2-千兆狂暴"
     type: hysteria2
     server: ${SERVER_IP}
     port: ${PORT}
-    ports: ${HOP_START}-${HOP_END}
-    hop-interval: 30
     password: "${HY2_PASS}"
     sni: ${HY2_SNI}
     skip-cert-verify: true
@@ -535,7 +522,7 @@ proxy-groups:
     type: select
     proxies:
       - "🔄 智能故障回退(HY2优先)"
-      - "⚡ Hysteria2-千兆狂暴(端口跳跃)"
+      - "⚡ Hysteria2-千兆狂暴"
       - "🛡️ VLESS-Reality-TCP防封备用"
       - DIRECT
 
@@ -545,13 +532,13 @@ proxy-groups:
     interval: 180
     lazy: true
     proxies:
-      - "⚡ Hysteria2-千兆狂暴(端口跳跃)"
+      - "⚡ Hysteria2-千兆狂暴"
       - "🛡️ VLESS-Reality-TCP防封备用"
 
   - name: "AI"
     type: select
     proxies:
-      - "⚡ Hysteria2-千兆狂暴(端口跳跃)"
+      - "⚡ Hysteria2-千兆狂暴"
       - "🛡️ VLESS-Reality-TCP防封备用"
 
 rules:
