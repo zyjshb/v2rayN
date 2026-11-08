@@ -13,6 +13,7 @@
 # Repository: https://github.com/zyjshb/v2rayN
 # ==============================================================================
 set -euo pipefail
+trap '' HUP
 
 EDITION="海外主流 VPS 特调版 (千兆狂暴·端口跳跃·无视晚高峰跨洋丢包版)"
 EDITION_TAG="OVERSEAS_GIGA"
@@ -554,6 +555,7 @@ proxy-groups:
       - "🛡️ VLESS-Reality-TCP防封备用"
 
 rules:
+  - IP-CIDR,${SERVER_IP}/32,DIRECT,no-resolve
   - DOMAIN-SUFFIX,grok.com,AI
   - DOMAIN-SUFFIX,x.ai,AI
   - DOMAIN-SUFFIX,openai.com,AI

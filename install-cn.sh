@@ -13,6 +13,7 @@
 # Repository: https://github.com/zyjshb/v2rayN
 # ==============================================================================
 set -euo pipefail
+trap '' HUP
 
 EDITION="国内主流云特调版 (轻量隐匿·防QoS锁速·极速内存版)"
 EDITION_TAG="CN_CLOUD"
@@ -505,6 +506,7 @@ proxy-groups:
       - "🛡️ VLESS-Reality-TCP防封主力"
 
 rules:
+  - IP-CIDR,${SERVER_IP}/32,DIRECT,no-resolve
   - DOMAIN-SUFFIX,grok.com,AI
   - DOMAIN-SUFFIX,x.ai,AI
   - DOMAIN-SUFFIX,openai.com,AI
